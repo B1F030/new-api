@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { VChart } from '@visactor/react-vchart'
+import type { IVChart } from '@visactor/vchart'
 import { AreaChart, BarChart3, WalletCards } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
@@ -34,6 +35,7 @@ import type {
   ConsumptionDistributionChartType,
   QuotaDataItem,
 } from '@/features/dashboard/types'
+import { createToggleLegendSelectionHandler } from '../../lib/vchart-legend'
 
 let themeManagerPromise: Promise<
   (typeof import('@visactor/vchart'))['ThemeManager']
@@ -44,6 +46,11 @@ interface ConsumptionDistributionChartProps {
   loading?: boolean
   timeGranularity?: TimeGranularity
   defaultChartType?: ConsumptionDistributionChartType
+}
+
+interface ConsumptionChartTypeState {
+  value: ConsumptionDistributionChartType
+  defaultValue?: ConsumptionDistributionChartType
 }
 
 const CHART_TYPE_ICONS: Record<
@@ -64,18 +71,32 @@ export function ConsumptionDistributionChart(
     '--radius-md',
     `${customization.preset}:${customization.radius}`
   )
-  const [chartType, setChartType] = useState<ConsumptionDistributionChartType>(
-    props.defaultChartType ?? 'bar'
-  )
+  const [chartTypeState, setChartTypeState] =
+    useState<ConsumptionChartTypeState>(() => ({
+      value: props.defaultChartType ?? 'bar',
+      defaultValue: props.defaultChartType,
+    }))
   const [themeReady, setThemeReady] = useState(false)
+  const chartRef = useRef<IVChart | null>(null)
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
+  const handleLegendSelection = useMemo(
+    () => createToggleLegendSelectionHandler(),
+    []
+  )
   const timeGranularity = props.timeGranularity ?? DEFAULT_TIME_GRANULARITY
 
-  useEffect(() => {
-    if (props.defaultChartType) setChartType(props.defaultChartType)
-  }, [props.defaultChartType])
+  const chartType =
+    chartTypeState.defaultValue === props.defaultChartType
+      ? chartTypeState.value
+      : (props.defaultChartType ?? chartTypeState.value)
+  const handleChartTypeChange = (value: ConsumptionDistributionChartType) => {
+    setChartTypeState({
+      value,
+      defaultValue: props.defaultChartType,
+    })
+  }
 
   useEffect(() => {
     const updateTheme = async () => {
@@ -143,7 +164,7 @@ export function ConsumptionDistributionChart(
               <button
                 key={item.value}
                 type='button'
-                onClick={() => setChartType(item.value)}
+                onClick={() => handleChartTypeChange(item.value)}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors ${
                   chartType === item.value
                     ? 'bg-background text-foreground shadow-sm'
@@ -168,6 +189,13 @@ export function ConsumptionDistributionChart(
               background: 'transparent',
             }}
             option={VCHART_OPTION}
+            onReady={(instance: IVChart) => {
+              chartRef.current = instance
+              handleLegendSelection.reset(instance)
+            }}
+            onLegendItemClick={(event: unknown) =>
+              handleLegendSelection(chartRef.current, event)
+            }
           />
         )}
       </div>

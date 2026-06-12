@@ -16,12 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
+import { getEndOfDay, getStartOfDay, type TimeGranularity } from '@/lib/time'
 import {
   DASHBOARD_CHART_PREFERENCES_STORAGE_KEY,
   DEFAULT_DASHBOARD_CHART_PREFERENCES,
   DEFAULT_TIME_GRANULARITY,
   EMPTY_DASHBOARD_FILTERS,
+  MAX_DASHBOARD_RANGE_DAYS,
   TIME_GRANULARITY_STORAGE_KEY,
   TIME_RANGE_PRESETS,
   TIME_RANGE_BY_GRANULARITY,
@@ -57,6 +58,12 @@ function isModelAnalyticsChartTab(
 
 function isTimeRangePresetDays(value: unknown): value is number {
   return TIME_RANGE_PRESETS.some((preset) => preset.days === value)
+}
+
+export interface DashboardMonthRange {
+  label: string
+  start: Date
+  end: Date
 }
 
 export function cleanFilters<T extends Record<string, unknown>>(
@@ -140,10 +147,55 @@ export function getDefaultDays(granularity?: TimeGranularity): number {
   return TIME_RANGE_BY_GRANULARITY[getSavedGranularity(granularity)]
 }
 
+export function getDashboardDateRange(
+  days: number,
+  fromDate: Date = new Date()
+): { start: Date; end: Date } {
+  const safeDays = Math.min(Math.max(days, 1), MAX_DASHBOARD_RANGE_DAYS)
+  const end = new Date(fromDate)
+  const start = getStartOfDay(end)
+  start.setDate(start.getDate() - (safeDays - 1))
+  return { start, end }
+}
+
+export function getDashboardMonthRanges(
+  fromDate: Date = new Date()
+): DashboardMonthRange[] {
+  const now = new Date(fromDate)
+  const minSelectableDate = getStartOfDay(now)
+  minSelectableDate.setDate(
+    minSelectableDate.getDate() - (MAX_DASHBOARD_RANGE_DAYS - 1)
+  )
+
+  const ranges: DashboardMonthRange[] = []
+  let cursor = new Date(now.getFullYear(), now.getMonth(), 1)
+
+  while (cursor.getTime() >= minSelectableDate.getTime()) {
+    const start = getStartOfDay(cursor)
+    const isCurrentMonth =
+      start.getFullYear() === now.getFullYear() &&
+      start.getMonth() === now.getMonth()
+    const end = isCurrentMonth
+      ? now
+      : getEndOfDay(new Date(start.getFullYear(), start.getMonth() + 1, 0))
+    const month = String(start.getMonth() + 1).padStart(2, '0')
+
+    ranges.push({
+      label: `${start.getFullYear()}-${month}`,
+      start,
+      end,
+    })
+
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1)
+  }
+
+  return ranges
+}
+
 export function buildDefaultDashboardFilters(
   preferences: DashboardChartPreferences = getSavedChartPreferences()
 ): DashboardFilters {
-  const { start, end } = getRollingDateRange(preferences.defaultTimeRangeDays)
+  const { start, end } = getDashboardDateRange(preferences.defaultTimeRangeDays)
   return {
     ...EMPTY_DASHBOARD_FILTERS,
     start_timestamp: start,

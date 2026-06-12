@@ -26,6 +26,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { SectionPageLayout } from '@/components/layout'
 import { FadeIn } from '@/components/page-transition'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
+import { ModelsDateRangeSelect } from './components/models/models-date-range-select'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
@@ -62,6 +63,12 @@ const LazyModelCharts = lazy(() =>
 const LazyConsumptionDistributionChart = lazy(() =>
   import('./components/models/consumption-distribution-chart').then((m) => ({
     default: m.ConsumptionDistributionChart,
+  }))
+)
+
+const LazyTokenUsageChart = lazy(() =>
+  import('./components/models/token-usage-chart').then((m) => ({
+    default: m.TokenUsageChart,
   }))
 )
 
@@ -162,10 +169,6 @@ export function Dashboard() {
     setModelFilters(filters)
   }, [])
 
-  const handleResetFilters = useCallback(() => {
-    setModelFilters(buildDefaultDashboardFilters(chartPreferences))
-  }, [chartPreferences])
-
   const handleDataUpdate = useCallback(
     (data: QuotaDataItem[], loading: boolean) => {
       setModelData(data)
@@ -206,15 +209,21 @@ export function Dashboard() {
   const modelActions =
     activeSection === 'models' ? (
       <>
+        <ModelsDateRangeSelect
+          filters={modelFilters}
+          preferences={chartPreferences}
+          onFilterChange={handleFilterChange}
+        />
         <ModelsChartPreferences
           preferences={chartPreferences}
           onPreferencesChange={handleChartPreferencesChange}
         />
-        <ModelsFilter
-          preferences={chartPreferences}
-          onFilterChange={handleFilterChange}
-          onReset={handleResetFilters}
-        />
+        {isAdmin && (
+          <ModelsFilter
+            filters={modelFilters}
+            onFilterChange={handleFilterChange}
+          />
+        )}
       </>
     ) : null
 
@@ -278,6 +287,14 @@ export function Dashboard() {
                 </Suspense>
               </FadeIn>
               <FadeIn delay={0.15}>
+                <Suspense fallback={<ModelChartsFallback />}>
+                  <LazyTokenUsageChart
+                    filters={modelFilters}
+                    isAdmin={isAdmin}
+                  />
+                </Suspense>
+              </FadeIn>
+              <FadeIn delay={0.2}>
                 <Suspense fallback={<ModelChartsFallback />}>
                   <LazyModelCharts
                     data={modelData}

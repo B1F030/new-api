@@ -23,6 +23,7 @@ export const DASHBOARD_CHART_PREFERENCES_STORAGE_KEY =
   'dashboard_models_chart_preferences'
 export const DEFAULT_TIME_GRANULARITY = 'hour' as const
 export const MAX_CHART_TREND_POINTS = 7
+export const MAX_DASHBOARD_RANGE_DAYS = 90
 
 export const DEFAULT_DASHBOARD_CHART_PREFERENCES: DashboardChartPreferences = {
   consumptionDistributionChart: 'bar',
@@ -47,7 +48,8 @@ export const TIME_RANGE_PRESETS = [
   { label: '1 Day', days: 1 },
   { label: '7 Days', days: 7 },
   { label: '14 Days', days: 14 },
-  { label: '29 Days', days: 29 },
+  { label: '30 Days', days: 30 },
+  { label: '90 Days', days: 90 },
 ] as const
 
 export const CONSUMPTION_DISTRIBUTION_CHART_OPTIONS = [

@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState, useRef } from 'react'
 import { VChart } from '@visactor/react-vchart'
+import type { IVChart } from '@visactor/vchart'
 import { PieChart as PieChartIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useThemeRadiusPx } from '@/lib/theme-radius'
@@ -34,6 +35,7 @@ import type {
   ModelAnalyticsChartTab,
   QuotaDataItem,
 } from '@/features/dashboard/types'
+import { createToggleLegendSelectionHandler } from '../../lib/vchart-legend'
 
 let themeManagerPromise: Promise<
   (typeof import('@visactor/vchart'))['ThemeManager']
@@ -54,6 +56,11 @@ interface ModelChartsProps {
   defaultChartTab?: ModelAnalyticsChartTab
 }
 
+interface ModelChartTabState {
+  value: ModelAnalyticsChartTab
+  defaultValue?: ModelAnalyticsChartTab
+}
+
 export function ModelCharts(props: ModelChartsProps) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
@@ -62,18 +69,33 @@ export function ModelCharts(props: ModelChartsProps) {
     '--radius-md',
     `${customization.preset}:${customization.radius}`
   )
-  const [activeTab, setActiveTab] = useState<ModelAnalyticsChartTab>(
-    props.defaultChartTab ?? 'trend'
+  const [activeTabState, setActiveTabState] = useState<ModelChartTabState>(
+    () => ({
+      value: props.defaultChartTab ?? 'trend',
+      defaultValue: props.defaultChartTab,
+    })
   )
   const [themeReady, setThemeReady] = useState(false)
+  const chartRef = useRef<IVChart | null>(null)
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
+  const handleLegendSelection = useMemo(
+    () => createToggleLegendSelectionHandler(),
+    []
+  )
   const timeGranularity = props.timeGranularity ?? DEFAULT_TIME_GRANULARITY
 
-  useEffect(() => {
-    if (props.defaultChartTab) setActiveTab(props.defaultChartTab)
-  }, [props.defaultChartTab])
+  const activeTab =
+    activeTabState.defaultValue === props.defaultChartTab
+      ? activeTabState.value
+      : (props.defaultChartTab ?? activeTabState.value)
+  const handleActiveTabChange = (value: ModelAnalyticsChartTab) => {
+    setActiveTabState({
+      value,
+      defaultValue: props.defaultChartTab,
+    })
+  }
 
   useEffect(() => {
     const updateTheme = async () => {
@@ -142,7 +164,7 @@ export function ModelCharts(props: ModelChartsProps) {
             <button
               key={tab.value}
               type='button'
-              onClick={() => setActiveTab(tab.value)}
+              onClick={() => handleActiveTabChange(tab.value)}
               className={`shrink-0 rounded-md px-3 text-xs font-medium transition-colors ${
                 activeTab === tab.value
                   ? 'bg-background text-foreground shadow-sm'
@@ -165,6 +187,13 @@ export function ModelCharts(props: ModelChartsProps) {
               background: 'transparent',
             }}
             option={VCHART_OPTION}
+            onReady={(instance: IVChart) => {
+              chartRef.current = instance
+              handleLegendSelection.reset(instance)
+            }}
+            onLegendItemClick={(event: unknown) =>
+              handleLegendSelection(chartRef.current, event)
+            }
           />
         )}
       </div>

@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
+import type { IVChart } from '@visactor/vchart'
 import { Users, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
@@ -39,6 +40,7 @@ import {
   processUserChartData,
 } from '@/features/dashboard/lib'
 import type { ProcessedUserChartData } from '@/features/dashboard/types'
+import { createToggleLegendSelectionHandler } from '../../lib/vchart-legend'
 
 let themeManagerPromise: Promise<
   (typeof import('@visactor/vchart'))['ThemeManager']
@@ -68,9 +70,14 @@ export function UserCharts() {
   const { resolvedTheme } = useTheme()
   const { customization } = useThemeCustomization()
   const [themeReady, setThemeReady] = useState(false)
+  const chartRef = useRef<IVChart | null>(null)
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
+  const handleLegendSelection = useMemo(
+    () => createToggleLegendSelectionHandler(),
+    []
+  )
 
   const [timeGranularity, setTimeGranularity] = useState<TimeGranularity>(() =>
     getSavedGranularity()
@@ -148,7 +155,6 @@ export function UserCharts() {
       t,
       topUserLimit,
       customization.preset,
-      customization.radius,
     ]
   )
 
@@ -247,6 +253,13 @@ export function UserCharts() {
                         background: 'transparent',
                       }}
                       option={VCHART_OPTION}
+                      onReady={(instance: IVChart) => {
+                        chartRef.current = instance
+                        handleLegendSelection.reset(instance)
+                      }}
+                      onLegendItemClick={(event: unknown) =>
+                        handleLegendSelection(chartRef.current, event)
+                      }
                     />
                   )
                 )}

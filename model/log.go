@@ -454,6 +454,49 @@ type Stat struct {
 	Tpm   int `json:"tpm"`
 }
 
+type TokenUsageDaily struct {
+	TokenId   int    `json:"token_id" gorm:"column:token_id"`
+	TokenName string `json:"token_name" gorm:"column:token_name"`
+	CreatedAt int64  `json:"created_at" gorm:"column:created_at"`
+	Quota     int    `json:"quota" gorm:"column:quota"`
+	TokenUsed int    `json:"token_used" gorm:"column:token_used"`
+	Count     int    `json:"count" gorm:"column:count"`
+}
+
+func tokenUsageDailyBucketExpr(anchorTimestamp int64) string {
+	if common.UsingMySQL {
+		return fmt.Sprintf("FLOOR((created_at - %d) / 86400) * 86400 + %d", anchorTimestamp, anchorTimestamp)
+	}
+	return fmt.Sprintf("((created_at - %d) / 86400) * 86400 + %d", anchorTimestamp, anchorTimestamp)
+}
+
+func GetTokenUsageDaily(userId int, username string, startTimestamp int64, endTimestamp int64) ([]TokenUsageDaily, error) {
+	bucketExpr := tokenUsageDailyBucketExpr(startTimestamp)
+	rows := make([]TokenUsageDaily, 0)
+	query := LOG_DB.Table("logs").
+		Select(fmt.Sprintf("token_id, token_name, %s as created_at, sum(quota) as quota, sum(prompt_tokens) + sum(completion_tokens) as token_used, count(*) as count", bucketExpr)).
+		Where("type = ?", LogTypeConsume).
+		Group(fmt.Sprintf("token_id, token_name, %s", bucketExpr)).
+		Order("created_at ASC, quota DESC")
+
+	if userId > 0 {
+		query = query.Where("user_id = ?", userId)
+	}
+	var err error
+	if query, err = applyExplicitLogTextFilter(query, "username", username); err != nil {
+		return nil, err
+	}
+	if startTimestamp != 0 {
+		query = query.Where("created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		query = query.Where("created_at <= ?", endTimestamp)
+	}
+
+	err = query.Find(&rows).Error
+	return rows, err
+}
+
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
 	tx := LOG_DB.Table("logs").Select("sum(quota) quota")
 

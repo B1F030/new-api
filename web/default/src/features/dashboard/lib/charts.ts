@@ -17,13 +17,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { dataScheme as vchartDefaultDataScheme } from '@visactor/vchart/esm/theme/color-scheme/builtin/default'
-import { getCurrencyDisplay } from '@/lib/currency'
-import { formatChartTime, type TimeGranularity } from '@/lib/time'
+import {
+  formatBillingCurrencyFromUSD,
+  getCurrencyDisplay,
+} from '@/lib/currency'
+import { formatChartTime, toStartOfDay, type TimeGranularity } from '@/lib/time'
 import { MAX_CHART_TREND_POINTS } from '@/features/dashboard/constants'
 import type {
   QuotaDataItem,
   ProcessedChartData,
+  ProcessedTokenUsageChartData,
   ProcessedUserChartData,
+  TokenUsageDataItem,
 } from '@/features/dashboard/types'
 
 type TFunction = (key: string) => string
@@ -716,6 +721,247 @@ export function processChartData(
     },
     totalQuotaDisplay: formatQuotaTotal(totalQuotaRaw),
     totalCountDisplay: formatInt(totalTimes),
+  }
+}
+
+export function processTokenUsageChartData(
+  data: TokenUsageDataItem[],
+  t?: TFunction,
+  themeKey?: string,
+  startTimestamp?: number,
+  endTimestamp?: number
+): ProcessedTokenUsageChartData {
+  const tt: TFunction = t ?? ((x) => x)
+  const otherLabel = tt('Other')
+  const unknownLabel = tt('Unknown Token')
+  const { config, meta } = getCurrencyDisplay()
+  const quotaPerUnit = config.quotaPerUnit
+  const quotaToUsd = (quota: number) => quota / quotaPerUnit
+  const quotaToBillingDisplayValue = (quota: number) => {
+    const usd = quotaToUsd(quota)
+    if (meta.kind === 'tokens') return Number(usd.toFixed(4))
+    const rate = 'exchangeRate' in meta ? meta.exchangeRate : 1
+    return Number((usd * rate).toFixed(4))
+  }
+  const formatCost = (quota: number) =>
+    formatBillingCurrencyFromUSD(quotaToUsd(quota), {
+      digitsLarge: 2,
+      digitsSmall: 4,
+      abbreviate: false,
+      minimumNonZero: 0.0001,
+    })
+
+  const emptyResult: ProcessedTokenUsageChartData = {
+    spec_token_usage: {
+      type: 'bar',
+      data: [{ id: 'tokenUsageData', values: [] }],
+      xField: 'Time',
+      yField: 'Cost',
+      seriesField: 'Token',
+      stack: true,
+      legends: { visible: true, selectMode: 'single' },
+      title: {
+        visible: true,
+        text: tt('API Token Cost'),
+        subtext: tt('No data available'),
+      },
+      background: { fill: 'transparent' },
+    },
+    totalCostDisplay: formatCost(0),
+    tokenCostSummaries: [],
+  }
+
+  if (!data || data.length === 0) return emptyResult
+
+  const tokenBaseName = (item: TokenUsageDataItem) =>
+    item.token_name?.trim() ||
+    (item.token_id ? `#${item.token_id}` : unknownLabel)
+  const tokenKey = (item: TokenUsageDataItem) =>
+    item.token_id ? `id:${item.token_id}` : `name:${tokenBaseName(item)}`
+  const tokenNameUsage = new Map<string, Set<string>>()
+
+  data.forEach((item) => {
+    const baseName = tokenBaseName(item)
+    const key = tokenKey(item)
+    if (!tokenNameUsage.has(baseName)) tokenNameUsage.set(baseName, new Set())
+    tokenNameUsage.get(baseName)!.add(key)
+  })
+
+  const tokenLabel = (item: TokenUsageDataItem) => {
+    const baseName = tokenBaseName(item)
+    const hasDuplicateName = (tokenNameUsage.get(baseName)?.size || 0) > 1
+    if (hasDuplicateName && item.token_id)
+      return `${baseName} (#${item.token_id})`
+    return baseName
+  }
+
+  const tokenTotals = new Map<
+    string,
+    { label: string; quota: number; count: number }
+  >()
+  const timeTokenMap = new Map<string, Map<string, number>>()
+
+  data.forEach((item) => {
+    const timeKey = formatChartTime(Number(item.created_at), 'day')
+    const token = tokenKey(item)
+    const quota = Number(item.quota ?? item.token_used) || 0
+    const count = Number(item.count) || 0
+
+    const total = tokenTotals.get(token) || {
+      label: tokenLabel(item),
+      quota: 0,
+      count: 0,
+    }
+    tokenTotals.set(token, {
+      label: total.label,
+      quota: total.quota + quota,
+      count: total.count + count,
+    })
+    if (!timeTokenMap.has(timeKey)) timeTokenMap.set(timeKey, new Map())
+    const tokenMap = timeTokenMap.get(timeKey)!
+    tokenMap.set(token, (tokenMap.get(token) || 0) + quota)
+  })
+
+  const rankedTokens = Array.from(tokenTotals.entries())
+    .map(([TokenKey, stats]) => ({
+      TokenKey,
+      Token: stats.label,
+      Quota: stats.quota,
+      Count: stats.count,
+    }))
+    .sort((a, b) => b.Quota - a.Quota)
+  const topTokens = rankedTokens.slice(0, 20)
+  const otherTokens = rankedTokens.slice(20)
+  const tokenColorDomain = Array.from(
+    new Set([...topTokens.map((item) => item.Token), otherLabel])
+  )
+  const tokenColorRange = getVChartDefaultColors(
+    tokenColorDomain.length,
+    themeKey
+  )
+
+  const bucketStart =
+    startTimestamp && startTimestamp > 0
+      ? toStartOfDay(startTimestamp)
+      : Math.min(...data.map((item) => Number(item.created_at) || 0))
+  const bucketEnd =
+    endTimestamp && endTimestamp > 0
+      ? toStartOfDay(endTimestamp)
+      : Math.max(...data.map((item) => Number(item.created_at) || 0))
+  const timeKeys: string[] = []
+  for (let ts = bucketStart; ts <= bucketEnd; ts += 86400) {
+    timeKeys.push(formatChartTime(ts, 'day'))
+  }
+
+  const values: Array<{
+    Time: string
+    Token: string
+    Cost: number
+    rawQuota: number
+  }> = []
+  timeKeys.forEach((time) => {
+    topTokens.forEach((token) => {
+      const rawQuota = timeTokenMap.get(time)?.get(token.TokenKey) || 0
+      values.push({
+        Time: time,
+        Token: token.Token,
+        Cost: quotaToBillingDisplayValue(rawQuota),
+        rawQuota,
+      })
+    })
+    if (otherTokens.length > 0) {
+      const otherQuotaSum = otherTokens.reduce(
+        (sum, token) =>
+          sum + (timeTokenMap.get(time)?.get(token.TokenKey) || 0),
+        0
+      )
+      values.push({
+        Time: time,
+        Token: otherLabel,
+        Cost: quotaToBillingDisplayValue(otherQuotaSum),
+        rawQuota: otherQuotaSum,
+      })
+    }
+  })
+
+  const totalQuota = rankedTokens.reduce((sum, item) => sum + item.Quota, 0)
+  const tokenCostSummaries = rankedTokens.map((item) => ({
+    tokenName: item.Token,
+    quota: item.Quota,
+    count: item.Count,
+    costDisplay: formatCost(item.Quota),
+  }))
+
+  return {
+    spec_token_usage: {
+      type: 'bar',
+      data: [{ id: 'tokenUsageData', values }],
+      xField: 'Time',
+      yField: 'Cost',
+      seriesField: 'Token',
+      stack: true,
+      legends: { visible: true, selectMode: 'single' },
+      color: {
+        type: 'ordinal',
+        domain: tokenColorDomain,
+        range: tokenColorRange,
+      },
+      title: {
+        visible: true,
+        text: tt('API Token Cost'),
+      },
+      bar: {
+        state: {
+          hover: { stroke: '#000', lineWidth: 1 },
+        },
+      },
+      tooltip: {
+        mark: {
+          content: [
+            {
+              key: (datum: Record<string, unknown>) => datum?.Token,
+              value: (datum: Record<string, unknown>) =>
+                formatCost(Number(datum?.rawQuota) || 0),
+            },
+          ],
+        },
+        dimension: {
+          content: [
+            {
+              key: (datum: Record<string, unknown>) => datum?.Token,
+              value: (datum: Record<string, unknown>) =>
+                Number(datum?.rawQuota) || 0,
+            },
+          ],
+          updateContent: (
+            array: Array<{
+              key: string
+              value: string | number
+            }>
+          ) => {
+            array.sort(
+              (a, b) => (Number(b.value) || 0) - (Number(a.value) || 0)
+            )
+            const total = array.reduce(
+              (sum, item) => sum + (Number(item.value) || 0),
+              0
+            )
+            for (let i = 0; i < array.length; i++) {
+              array[i].value = formatCost(Number(array[i].value) || 0)
+            }
+            array.unshift({
+              key: tt('Total:'),
+              value: formatCost(total),
+            })
+            return array
+          },
+        },
+      },
+      background: { fill: 'transparent' },
+      animation: true,
+    },
+    totalCostDisplay: formatCost(totalQuota),
+    tokenCostSummaries,
   }
 }
 
