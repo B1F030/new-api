@@ -55,6 +55,10 @@ func relayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIErro
 	return err
 }
 
+func recordRequestBodyLogIfEnabled(c *gin.Context) {
+	service.RecordRequestBodyStdoutLog(c)
+}
+
 func geminiRelayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.NewAPIError {
 	var err *types.NewAPIError
 	if strings.Contains(c.Request.URL.Path, "embed") {
@@ -122,6 +126,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		newAPIError = types.NewError(err, types.ErrorCodeGenRelayInfoFailed)
 		return
 	}
+
+	recordRequestBodyLogIfEnabled(c)
 
 	if relayFormat == types.RelayFormatClaude && relayInfo.RelayMode == relayconstant.RelayModeClaudeCountTokens {
 		newAPIError = relayClaudeCountTokens(c, relayInfo, request)
@@ -488,6 +494,8 @@ func RelayMidjourney(c *gin.Context) {
 		return
 	}
 
+	recordRequestBodyLogIfEnabled(c)
+
 	var mjErr *dto.MidjourneyResponse
 	switch relayInfo.RelayMode {
 	case relayconstant.RelayModeMidjourneyNotify:
@@ -573,6 +581,8 @@ func RelayTask(c *gin.Context) {
 		respondTaskError(c, taskErr)
 		return
 	}
+
+	recordRequestBodyLogIfEnabled(c)
 
 	var result *relay.TaskSubmitResult
 	var taskErr *dto.TaskError

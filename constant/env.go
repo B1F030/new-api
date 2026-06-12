@@ -11,6 +11,12 @@ var GetMediaTokenNotStream bool
 var UpdateTask bool
 var MaxRequestBodyMB int
 var AnonymousRequestBodyLimitKB int
+var SysLogEnabled = true
+var GinLogEnabled = true
+var InfoLogEnabled = true
+var RequestBodyLogEnabled bool
+var RequestBodyLogSamplePercent int
+var RequestBodyLogMaxLineChars int
 var AzureDefaultAPIVersion string
 var NotifyLimitCount int
 var NotificationLimitDurationMinute int

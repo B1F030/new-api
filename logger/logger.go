@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -20,7 +21,7 @@ import (
 const (
 	loggerINFO  = "INFO"
 	loggerWarn  = "WARN"
-	loggerError = "ERR"
+	loggerError = "ERROR"
 	loggerDebug = "DEBUG"
 )
 
@@ -74,10 +75,16 @@ func SetupLogger() {
 }
 
 func LogInfo(ctx context.Context, msg string) {
+	if !constant.InfoLogEnabled {
+		return
+	}
 	logHelper(ctx, loggerINFO, msg)
 }
 
 func LogWarn(ctx context.Context, msg string) {
+	if !constant.InfoLogEnabled {
+		return
+	}
 	logHelper(ctx, loggerWarn, msg)
 }
 
@@ -86,7 +93,7 @@ func LogError(ctx context.Context, msg string) {
 }
 
 func LogDebug(ctx context.Context, msg string, args ...any) {
-	if common.DebugEnabled {
+	if constant.InfoLogEnabled && common.DebugEnabled {
 		if len(args) > 0 {
 			msg = fmt.Sprintf(msg, args...)
 		}

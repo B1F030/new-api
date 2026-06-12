@@ -137,6 +137,12 @@ func initConstantEnv() {
 	// MaxRequestBodyMB 请求体最大大小（解压后），用于防止超大请求/zip bomb导致内存暴涨
 	constant.MaxRequestBodyMB = GetEnvOrDefault("MAX_REQUEST_BODY_MB", 128)
 	constant.AnonymousRequestBodyLimitKB = GetEnvOrDefault("ANONYMOUS_REQUEST_BODY_LIMIT_KB", 512)
+	constant.SysLogEnabled = GetEnvOrDefaultBool("SYS_LOG_ENABLED", true)
+	constant.GinLogEnabled = GetEnvOrDefaultBool("GIN_LOG_ENABLED", true)
+	constant.InfoLogEnabled = GetEnvOrDefaultBool("INFO_LOG_ENABLED", true)
+	constant.RequestBodyLogEnabled = GetEnvOrDefaultBool("REQUEST_BODY_LOG_ENABLED", false)
+	constant.RequestBodyLogSamplePercent = GetEnvOrDefault("REQUEST_BODY_LOG_SAMPLE_PERCENT", 1)
+	constant.RequestBodyLogMaxLineChars = GetEnvOrDefault("REQUEST_BODY_LOG_MAX_LINE_CHARS", 4096)
 	// ForceStreamOption 覆盖请求参数，强制返回usage信息
 	constant.ForceStreamOption = GetEnvOrDefaultBool("FORCE_STREAM_OPTION", true)
 	constant.CountToken = GetEnvOrDefaultBool("CountToken", true)

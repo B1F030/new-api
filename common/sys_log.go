@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuantumNous/new-api/constant"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -15,6 +17,9 @@ import (
 var LogWriterMu sync.RWMutex
 
 func SysLog(s string) {
+	if !constant.SysLogEnabled {
+		return
+	}
 	t := time.Now()
 	LogWriterMu.RLock()
 	_, _ = fmt.Fprintf(gin.DefaultWriter, "[SYS] %v | %s \n", t.Format("2006/01/02 - 15:04:05"), s)
@@ -22,6 +27,9 @@ func SysLog(s string) {
 }
 
 func SysError(s string) {
+	if !constant.SysLogEnabled {
+		return
+	}
 	t := time.Now()
 	LogWriterMu.RLock()
 	_, _ = fmt.Fprintf(gin.DefaultErrorWriter, "[SYS] %v | %s \n", t.Format("2006/01/02 - 15:04:05"), s)
